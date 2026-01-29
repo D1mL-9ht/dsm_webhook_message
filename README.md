@@ -62,3 +62,7 @@ POST请求，参考钉钉机器人[API设置](https://open.dingtalk.com/document
 ## 为什么一定要用钉钉机器人的通知？
 
 是啊！为什么？邮箱不就不用折腾了？？？wtf...
+
+
+
+加了飞书的Notify ，消息速度好像比钉钉快
