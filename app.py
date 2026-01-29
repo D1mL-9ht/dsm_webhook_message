@@ -41,7 +41,7 @@ def recevice_data():
     text: str = text.replace(r"\n", "\n")
     if not secret or not access_token:
         print("钉钉机器人 服务的 SECRET 或者 TOKEN 未设置!!\n取消推送")
-        return
+        return jsonify({"errcode": 1, "errmsg": "secret or access_token missing"}), 400
     print("钉钉机器人 服务启动")
     # sign生成算法
     timestamp = str(round(time.time() * 1000))

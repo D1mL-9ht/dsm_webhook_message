@@ -1,0 +1,52 @@
+# 工作流名称：推Tag自动打包并发布Release
+name: Auto Build & Release
+
+# 触发条件：推所有v开头的Tag（如v1.0.0、v1.1.0、v1.0.1）时触发
+on:
+  push:
+    tags:
+      - 'v*'
+
+# 工作流任务
+jobs:
+  build-and-release:
+    # 运行在Ubuntu 22.04云端环境（和你Docker/Linux打包环境一致，避免二进制兼容问题）
+    runs-on: ubuntu-22.04
+    steps:
+      # 步骤1：拉取GitHub仓库的代码到云端环境
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 步骤2：配置Python环境（和你本地的Python3版本一致，选3.11兼容Nuitka）
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip' # 缓存pip依赖，加快后续构建
+
+      # 步骤3：安装依赖（pip安装Nuitka和你项目的所有依赖）
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install nuitka # 安装打包工具Nuitka
+          # 👇 关键：如果你的项目有其他依赖（如requests、pytest），把它们写在这里，用空格分隔
+          pip install requests flask
+
+      # 步骤4：执行Nuitka打包（和你本地的打包命令完全一致，生成release/dsm_webhook_message）
+      - name: Build with Nuitka
+        run: |
+          python -m nuitka --onefile --output-filename=dsm_webhook_message --output-dir=./release --remove-output --lto=full --static-libpython=yes main.py
+
+      # 步骤5：创建GitHub Release并上传打包的二进制文件
+      - name: Create Release & Upload Asset
+        uses: softprops/action-gh-release@v2
+        with:
+          # Release标题：和Tag一致（如v1.0.1）
+          name: ${{ github.ref_name }}
+          # Release描述：可手动在GitHub编辑，这里默认取Tag的备注
+          body: "自动构建发布：${{ github.ref_name }} 版本，包含Linux/amd64架构二进制文件"
+          # 上传的文件路径：指向Nuitka打包的二进制
+          files: ./release/dsm_webhook_message
+        # 必须的令牌：GitHub自动生成，无需手动配置，用于授权创建Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
