@@ -35,7 +35,7 @@ jobs:
       # 步骤4：执行Nuitka打包（和你本地的打包命令完全一致，生成release/dsm_webhook_message）
       - name: Build with Nuitka
         run: |
-          python -m nuitka --onefile --output-filename=dsm_webhook_message --output-dir=./release --remove-output --lto=full --static-libpython=yes main.py
+          python -m nuitka --onefile --output-filename=dsm_webhook_message_${{ github.ref_name }}_linux_amd64 --output-dir=./release --remove-output --lto=yes --static-libpython=yes main.py
 
       # 步骤5：创建GitHub Release并上传打包的二进制文件
       - name: Create Release & Upload Asset
