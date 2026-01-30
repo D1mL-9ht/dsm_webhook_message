@@ -1,7 +1,7 @@
 # 工作流名称：推Tag自动打包并发布Release
 name: Auto Build & Release
 
-# 触发条件：推所有v开头的Tag（如v1.0.0、v1.1.0、v1.0.1）时触发
+# 触发条件：推所有v开头的Tag
 on:
   push:
     tags:
@@ -10,43 +10,60 @@ on:
 # 工作流任务
 jobs:
   build-and-release:
-    # 运行在Ubuntu 22.04云端环境（和你Docker/Linux打包环境一致，避免二进制兼容问题）
-    runs-on: ubuntu-22.04
+    # 核心修改：替换为Debian 12云端环境
+    runs-on: debian-12
     steps:
-      # 步骤1：拉取GitHub仓库的代码到云端环境
+      # 步骤1：拉取GitHub仓库的代码到云端环境（深度1拉取全量代码，避免打包缺失文件）
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
-      # 步骤2：配置Python环境（和你本地的Python3版本一致，选3.11兼容Nuitka）
+      # 步骤2：配置Python环境（3.11兼容Nuitka，缓存pip依赖加快构建，Debian下无差异）
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip' # 缓存pip依赖，加快后续构建
+          cache: 'pip'
 
-      # 步骤3：安装依赖（pip安装Nuitka和你项目的所有依赖）
+      # 步骤3：安装依赖（Nuitka+项目业务依赖，Debian下pip命令和Ubuntu完全一致）
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install nuitka # 安装打包工具Nuitka
-          # 👇 关键：如果你的项目有其他依赖（如requests、pytest），把它们写在这里，用空格分隔
-          pip install requests flask
+          # 安装打包工具和项目依赖，按需补充
+          pip install nuitka requests flask
+          # 验证安装（可选，方便排查依赖问题）
+          pip list | grep -E 'nuitka|requests|flask'
 
-      # 步骤4：执行Nuitka打包（和你本地的打包命令完全一致，生成release/dsm_webhook_message）
+      # 步骤4：创建release目录+Nuitka打包
       - name: Build with Nuitka
         run: |
-          python -m nuitka --onefile --output-filename=dsm_webhook_message_${{ github.ref_name }}_linux_amd64 --output-dir=./release --remove-output --lto=yes --static-libpython=yes app.py
+          # 强制创建release目录，避免目录不存在导致打包失败
+          mkdir -p ./release
+          # 原打包命令（保留Tag+架构后缀，生成唯一文件名，Debian下Nuitka打包无兼容问题）
+          python -m nuitka --onefile \
+            --output-filename=dsm_webhook_message_${{ github.ref_name }}_linux_amd64 \
+            --output-dir=./release \
+            --remove-output \
+            --lto=yes \
+            --static-libpython=yes \
+            app.py
+          # 关键：打印release目录文件，确认打包产物生成成功（方便排查）
+          echo "===== 打包产物列表 ====="
+          ls -l ./release/
+          echo "========================"
 
-      # 步骤5：创建GitHub Release并上传打包的二进制文件
+      # 步骤5：创建GitHub Release并上传二进制文件
       - name: Create Release & Upload Asset
         uses: softprops/action-gh-release@v2
         with:
-          # Release标题：和Tag一致（如v1.0.1）
+          # 解决403核心：传GITHUB_TOKEN（需仓库已开读写权限）
+          token: ${{ secrets.GITHUB_TOKEN }}
+          # Release标题：和Tag名称一致（如v1.0.3）
           name: ${{ github.ref_name }}
-          # Release描述：可手动在GitHub编辑，这里默认取Tag的备注
-          body: "自动构建发布：${{ github.ref_name }} 版本，包含Linux/amd64架构二进制文件"
-          # 上传的文件路径：指向Nuitka打包的二进制
-          files: ./release/dsm_webhook_message
-        # 必须的令牌：GitHub自动生成，无需手动配置，用于授权创建Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Release描述：清晰说明版本、架构、系统
+          body: "✅ 自动构建发布：${{ github.ref_name }} \n📦 系统/架构：Debian 12/Linux/amd64 \n🔧 打包工具：Nuitka \n📄 主文件：app.py"
+          # 解决文件匹配失败：通配符匹配所有打包产物
+          files: ./release/*
+          # 正式版本设为false，预发布可改为true
+          prerelease: false
